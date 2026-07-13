@@ -20,6 +20,14 @@ from pipeline_dashboard_api_client.contracts import (
     JsonScalar,
     QueryParameters,
 )
+from pipeline_dashboard_api_client.parser import (
+    DashboardDocument,
+    HealthDocument,
+    JsonObject,
+    JsonValue,
+    ResponseParser,
+    SummaryDocument,
+)
 from pipeline_dashboard_api_client.transport import HttpTransport
 from pipeline_dashboard_api_client.version import __version__
 
@@ -30,12 +38,18 @@ __all__ = [
     "ApiResponse",
     "DashboardApiClientError",
     "DashboardClient",
+    "DashboardDocument",
     "DashboardTransport",
     "ErrorKind",
     "Headers",
+    "HealthDocument",
     "HttpMethod",
     "HttpTransport",
+    "JsonObject",
     "JsonScalar",
+    "JsonValue",
     "QueryParameters",
+    "ResponseParser",
+    "SummaryDocument",
     "__version__",
 ]
