@@ -1,0 +1,5 @@
+include README.md
+include pyproject.toml
+recursive-include src/pipeline_dashboard_api_client py.typed
+recursive-exclude * pycache
+recursive-exclude * *.py[cod]
