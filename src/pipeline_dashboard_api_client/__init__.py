@@ -16,6 +16,7 @@ from pipeline_dashboard_api_client.contracts import (
     JsonScalar,
     QueryParameters,
 )
+from pipeline_dashboard_api_client.transport import HttpTransport
 from pipeline_dashboard_api_client.version import __version__
 
 __all__ = [
@@ -27,6 +28,7 @@ __all__ = [
     "ErrorKind",
     "Headers",
     "HttpMethod",
+    "HttpTransport",
     "JsonScalar",
     "QueryParameters",
     "__version__",
