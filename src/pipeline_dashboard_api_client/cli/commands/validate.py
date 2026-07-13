@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from typing import Protocol, TextIO
 
-from pipeline_dashboard_api_client.client import DashboardClient
 from pipeline_dashboard_api_client.cli.config import OutputMode
 from pipeline_dashboard_api_client.cli.printer import (
     EXIT_FAILURE,
@@ -12,6 +11,7 @@ from pipeline_dashboard_api_client.cli.printer import (
     print_error,
     print_message,
 )
+from pipeline_dashboard_api_client.client import DashboardClient
 from pipeline_dashboard_api_client.contracts import DashboardApiClientError
 from pipeline_dashboard_api_client.parser import ResponseParser
 
