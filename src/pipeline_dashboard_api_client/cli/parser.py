@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 
-
 DEFAULT_BASE_URL = "http://127.0.0.1:8000"
 DEFAULT_TIMEOUT_SECONDS = 10.0
 DEFAULT_MAX_RETRIES = 2
