@@ -44,7 +44,7 @@ dev = [
 ]
 
 [project.scripts]
-radar-dashboard-client = "pipeline_dashboard_api_client.cli:main"
+radar-dashboard-client = "pipeline_dashboard_api_client.cli.main:main"
 
 [tool.setuptools]
 package-dir = { "" = "src" }
