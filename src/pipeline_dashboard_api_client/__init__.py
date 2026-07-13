@@ -4,6 +4,30 @@ A typed client package for communicating with the RADAR_SERVICE
 Pipeline Dashboard Backend.
 """
 
+from pipeline_dashboard_api_client.contracts import (
+    ApiClientConfig,
+    ApiErrorPayload,
+    ApiRequest,
+    ApiResponse,
+    DashboardApiClientError,
+    ErrorKind,
+    Headers,
+    HttpMethod,
+    JsonScalar,
+    QueryParameters,
+)
 from pipeline_dashboard_api_client.version import __version__
 
-__all__ = ["__version__"]
+__all__ = [
+    "ApiClientConfig",
+    "ApiErrorPayload",
+    "ApiRequest",
+    "ApiResponse",
+    "DashboardApiClientError",
+    "ErrorKind",
+    "Headers",
+    "HttpMethod",
+    "JsonScalar",
+    "QueryParameters",
+    "__version__",
+]
