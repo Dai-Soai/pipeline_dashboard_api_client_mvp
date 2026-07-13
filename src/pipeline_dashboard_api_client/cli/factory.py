@@ -6,8 +6,8 @@ from dataclasses import dataclass
 from types import TracebackType
 from typing import Self
 
-from pipeline_dashboard_api_client.client import DashboardClient
 from pipeline_dashboard_api_client.cli.config import CliRuntimeConfig
+from pipeline_dashboard_api_client.client import DashboardClient
 from pipeline_dashboard_api_client.parser import ResponseParser
 from pipeline_dashboard_api_client.transport import HttpTransport
 
