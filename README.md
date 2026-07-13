@@ -23,13 +23,18 @@ M1 — Bootstrap
 
 ```bash
 radar-dashboard-client version
-Development setup
+```
+
+## Development setup
+
 python3 -m venv .venv
 source .venv/bin/activate
 
 python -m pip install --upgrade pip
 python -m pip install -e ".[dev]"
-Quality checks
+
+## Quality checks
+
 ruff check .
 mypy src tests
 pytest
