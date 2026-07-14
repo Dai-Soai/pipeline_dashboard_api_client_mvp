@@ -285,3 +285,70 @@ def test_cache_ttl_rejects_invalid_values(
         )
 
     assert captured.value.code == 2
+
+
+def test_parser_accepts_cache_status_command() -> None:
+    """Cache status is registered as a top-level command."""
+    parser = build_parser()
+
+    args = parser.parse_args(["cache-status"])
+
+    assert args.command == "cache-status"
+    assert args.cache_dir == DEFAULT_CACHE_DIR
+    assert args.output_mode == DEFAULT_OUTPUT_MODE
+
+
+def test_parser_accepts_cache_clear_command() -> None:
+    """Cache clear is registered as a top-level command."""
+    parser = build_parser()
+
+    args = parser.parse_args(["cache-clear"])
+
+    assert args.command == "cache-clear"
+    assert args.cache_dir == DEFAULT_CACHE_DIR
+    assert args.output_mode == DEFAULT_OUTPUT_MODE
+
+
+def test_cache_command_accepts_custom_directory() -> None:
+    """Cache commands accept an explicit cache root."""
+    parser = build_parser()
+
+    args = parser.parse_args(
+        [
+            "cache-status",
+            "--cache-dir",
+            "/tmp/radar-cache",
+        ]
+    )
+
+    assert args.cache_dir == "/tmp/radar-cache"
+
+
+def test_cache_command_accepts_compact_output() -> None:
+    """Cache commands support compact JSON output."""
+    parser = build_parser()
+
+    args = parser.parse_args(
+        [
+            "cache-clear",
+            "--compact",
+        ]
+    )
+
+    assert args.output_mode == "compact"
+
+
+def test_cache_command_does_not_expose_network_options() -> None:
+    """Cache commands reject backend-only connection options."""
+    parser = build_parser()
+
+    with pytest.raises(SystemExit) as captured:
+        parser.parse_args(
+            [
+                "cache-status",
+                "--base-url",
+                "https://dashboard.example.com",
+            ]
+        )
+
+    assert captured.value.code == 2

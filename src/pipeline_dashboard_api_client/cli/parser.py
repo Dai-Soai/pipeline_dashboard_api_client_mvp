@@ -56,6 +56,17 @@ def build_parser() -> argparse.ArgumentParser:
         help_text="Validate connectivity with the dashboard backend.",
     )
 
+    _add_cache_command(
+        subparsers,
+        name="cache-status",
+        help_text="Display filesystem cache status.",
+    )
+    _add_cache_command(
+        subparsers,
+        name="cache-clear",
+        help_text="Delete all managed filesystem cache entries.",
+    )
+
     return parser
 
 
@@ -73,6 +84,54 @@ def _add_api_command(
     )
 
     _add_common_api_options(command_parser)
+    return command_parser
+
+
+def _add_cache_command(
+    subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
+    *,
+    name: str,
+    help_text: str,
+) -> argparse.ArgumentParser:
+    """Create a cache management command parser."""
+    command_parser = subparsers.add_parser(
+        name,
+        help=help_text,
+        description=help_text,
+    )
+
+    command_parser.add_argument(
+        "--cache-dir",
+        default=DEFAULT_CACHE_DIR,
+        metavar="PATH",
+        help=(
+            "Filesystem cache directory "
+            f"(default: {DEFAULT_CACHE_DIR})."
+        ),
+    )
+
+    output_group = command_parser.add_mutually_exclusive_group()
+
+    output_group.add_argument(
+        "--pretty",
+        dest="output_mode",
+        action="store_const",
+        const="pretty",
+        help="Print indented JSON output.",
+    )
+
+    output_group.add_argument(
+        "--compact",
+        dest="output_mode",
+        action="store_const",
+        const="compact",
+        help="Print compact JSON output.",
+    )
+
+    command_parser.set_defaults(
+        output_mode=DEFAULT_OUTPUT_MODE,
+    )
+
     return command_parser
 
 
