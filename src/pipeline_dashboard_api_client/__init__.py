@@ -4,6 +4,12 @@ A typed client package for communicating with the RADAR_SERVICE
 Pipeline Dashboard Backend.
 """
 
+from pipeline_dashboard_api_client.cache_service import (
+    CacheLookup,
+    CacheLookupStatus,
+    CacheService,
+    CacheStore,
+)
 from pipeline_dashboard_api_client.client import (
     DashboardClient,
     DashboardTransport,
@@ -36,6 +42,10 @@ __all__ = [
     "ApiErrorPayload",
     "ApiRequest",
     "ApiResponse",
+    "CacheLookup",
+    "CacheLookupStatus",
+    "CacheService",
+    "CacheStore",
     "DashboardApiClientError",
     "DashboardClient",
     "DashboardDocument",
