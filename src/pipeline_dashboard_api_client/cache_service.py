@@ -25,6 +25,13 @@ class CacheStore(Protocol):
         """Read a cache entry."""
         ...
 
+    def write(
+        self,
+        entry: CacheEntry,
+    ) -> object:
+        """Write a cache entry."""
+        ...
+
     def delete(
         self,
         key: CacheKey,
@@ -172,6 +179,13 @@ class CacheService:
             return lookup.entry
 
         return None
+
+    def write(
+        self,
+        entry: CacheEntry,
+    ) -> None:
+        """Persist one cache entry."""
+        self._store.write(entry)
 
     def delete(
         self,

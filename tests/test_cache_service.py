@@ -36,6 +36,14 @@ class MemoryCacheStore:
         """Read an entry."""
         return self.entries.get(key)
 
+    def write(
+        self,
+        entry: CacheEntry,
+    ) -> object:
+        """Persist an entry."""
+        self.entries[entry.key] = entry
+        return entry.key
+
     def delete(
         self,
         key: CacheKey,

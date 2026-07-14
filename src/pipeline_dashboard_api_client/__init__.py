@@ -10,6 +10,10 @@ from pipeline_dashboard_api_client.cache_service import (
     CacheService,
     CacheStore,
 )
+from pipeline_dashboard_api_client.cached_client import (
+    CachedDashboardClient,
+    NowProvider,
+)
 from pipeline_dashboard_api_client.client import (
     DashboardClient,
     DashboardTransport,
@@ -46,6 +50,7 @@ __all__ = [
     "CacheLookupStatus",
     "CacheService",
     "CacheStore",
+    "CachedDashboardClient",
     "DashboardApiClientError",
     "DashboardClient",
     "DashboardDocument",
@@ -58,6 +63,7 @@ __all__ = [
     "JsonObject",
     "JsonScalar",
     "JsonValue",
+    "NowProvider",
     "QueryParameters",
     "ResponseParser",
     "SummaryDocument",
