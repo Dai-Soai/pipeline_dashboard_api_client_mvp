@@ -6,7 +6,11 @@ from dataclasses import dataclass
 from types import TracebackType
 from typing import Self
 
+from pipeline_dashboard_api_client.cli.cache_factory import (
+    build_cache_wiring,
+)
 from pipeline_dashboard_api_client.cli.config import CliRuntimeConfig
+from pipeline_dashboard_api_client.cli.protocols import ManagedClient
 from pipeline_dashboard_api_client.client import DashboardClient
 from pipeline_dashboard_api_client.parser import ResponseParser
 from pipeline_dashboard_api_client.transport import HttpTransport
@@ -16,7 +20,7 @@ from pipeline_dashboard_api_client.transport import HttpTransport
 class CliDependencies:
     """Runtime dependencies required by CLI command handlers."""
 
-    client: DashboardClient
+    client: ManagedClient
     response_parser: ResponseParser
     transport: HttpTransport
     _closed: bool = False
@@ -55,16 +59,21 @@ class CliDependencies:
 def build_dependencies(
     config: CliRuntimeConfig,
 ) -> CliDependencies:
-    """Build the default production dependency graph."""
+    """Build the production dependency graph with optional cache wiring."""
     transport = HttpTransport(config.client)
 
-    client = DashboardClient(
+    network_client = DashboardClient(
         config.client,
         transport=transport,
     )
 
+    cache_wiring = build_cache_wiring(
+        config,
+        network_client,
+    )
+
     return CliDependencies(
-        client=client,
+        client=cache_wiring.client,
         response_parser=ResponseParser(),
         transport=transport,
     )

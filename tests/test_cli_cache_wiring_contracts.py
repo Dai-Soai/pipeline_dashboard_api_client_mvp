@@ -14,18 +14,26 @@ from pipeline_dashboard_api_client.cli.cache_wiring import (
 
 @dataclass
 class DummyClient:
-    """Minimal managed client used by contract tests."""
+    """Minimal client satisfying the managed dashboard client protocol."""
 
-    closed: bool = False
+    def __init__(self) -> None:
+        self.closed = False
 
     @property
     def is_closed(self) -> bool:
-        """Return whether the dummy client is closed."""
         return self.closed
 
     def close(self) -> None:
-        """Close the dummy client."""
         self.closed = True
+
+    def get_dashboard(self) -> bytes:
+        return b'{"status":"ok","panels":[]}'
+
+    def get_summary(self) -> bytes:
+        return b'{"status":"ok"}'
+
+    def get_health(self) -> bytes:
+        return b'{"status":"healthy"}'
 
 
 @dataclass(frozen=True)

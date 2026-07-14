@@ -11,7 +11,7 @@ from pipeline_dashboard_api_client.cli.printer import (
     print_error,
     print_message,
 )
-from pipeline_dashboard_api_client.client import DashboardClient
+from pipeline_dashboard_api_client.cli.protocols import DashboardCommandClient
 from pipeline_dashboard_api_client.contracts import DashboardApiClientError
 from pipeline_dashboard_api_client.parser import ResponseParser
 
@@ -22,7 +22,10 @@ _UNHEALTHY_MESSAGE = "Dashboard backend returned an unhealthy status."
 class ValidateCommandDependencies(Protocol):
     """Dependencies required by the validation command."""
 
-    client: DashboardClient
+    @property
+    def client(self) -> DashboardCommandClient:
+        """Return the dashboard command client."""
+        ...
     response_parser: ResponseParser
 
 

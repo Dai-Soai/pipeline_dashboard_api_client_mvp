@@ -3,26 +3,19 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Generic, Protocol, TypeVar, runtime_checkable
+from typing import Generic, Protocol, TypeVar
 
 from pipeline_dashboard_api_client.cli.config import CliRuntimeConfig
+from pipeline_dashboard_api_client.cli.protocols import ManagedClient
 
 ClientT = TypeVar("ClientT")
 StoreT = TypeVar("StoreT")
 
-
-@runtime_checkable
-class ManagedClient(Protocol):
-    """Minimum lifecycle contract required by the CLI runtime."""
-
-    @property
-    def is_closed(self) -> bool:
-        """Return whether the client has been closed."""
-        ...
-
-    def close(self) -> None:
-        """Release resources owned by the client."""
-        ...
+__all__ = [
+    "CacheWiringBuilder",
+    "CacheWiringResult",
+    "ManagedClient",
+]
 
 
 @dataclass(frozen=True, slots=True)
@@ -36,14 +29,10 @@ class CacheWiringResult(Generic[ClientT, StoreT]):
     def __post_init__(self) -> None:
         """Reject internally inconsistent wiring results."""
         if self.cache_enabled and self.cache_store is None:
-            raise ValueError(
-                "cache-enabled wiring requires a cache store"
-            )
+            raise ValueError("cache-enabled wiring requires a cache store")
 
         if not self.cache_enabled and self.cache_store is not None:
-            raise ValueError(
-                "cache-disabled wiring cannot expose a cache store"
-            )
+            raise ValueError("cache-disabled wiring cannot expose a cache store")
 
     @property
     def uses_cache(self) -> bool:
