@@ -246,6 +246,16 @@ class CachedDashboardClient:
         return now.astimezone(UTC)
 
 
+
+    @property
+    def is_closed(self) -> bool:
+        """Return whether the wrapped network client is closed."""
+        return self.client.is_closed
+
+    def close(self) -> None:
+        """Close the wrapped network client."""
+        self.client.close()
+
 def _utc_now() -> datetime:
     """Return the current UTC timestamp."""
     return datetime.now(UTC)
