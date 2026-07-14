@@ -9,6 +9,9 @@ DEFAULT_TIMEOUT_SECONDS = 10.0
 DEFAULT_MAX_RETRIES = 2
 DEFAULT_OUTPUT_MODE = "pretty"
 
+DEFAULT_CACHE_DIR = "~/.cache/radar-dashboard-client"
+DEFAULT_CACHE_TTL_SECONDS = 300.0
+
 
 def build_parser() -> argparse.ArgumentParser:
     """Build and return the top-level CLI argument parser."""
@@ -114,9 +117,7 @@ def _add_common_api_options(
         action="append",
         default=None,
         metavar="NAME=VALUE",
-        help=(
-            "Add an HTTP header. May be supplied more than once."
-        ),
+        help="Add an HTTP header. May be supplied more than once.",
     )
 
     output_group = parser.add_mutually_exclusive_group()
@@ -138,6 +139,50 @@ def _add_common_api_options(
     )
 
     parser.set_defaults(output_mode=DEFAULT_OUTPUT_MODE)
+
+    parser.add_argument(
+        "--cache-dir",
+        default=DEFAULT_CACHE_DIR,
+        metavar="PATH",
+        help=(
+            "Filesystem cache directory "
+            f"(default: {DEFAULT_CACHE_DIR})."
+        ),
+    )
+
+    parser.add_argument(
+        "--cache-ttl",
+        type=_positive_float,
+        default=DEFAULT_CACHE_TTL_SECONDS,
+        metavar="SECONDS",
+        help=(
+            "Fresh-cache lifetime in seconds "
+            f"(default: {DEFAULT_CACHE_TTL_SECONDS:g})."
+        ),
+    )
+
+    cache_mode_group = parser.add_mutually_exclusive_group()
+
+    cache_mode_group.add_argument(
+        "--offline",
+        action="store_true",
+        help=(
+            "Use stale cache when the backend connection "
+            "fails or times out."
+        ),
+    )
+
+    cache_mode_group.add_argument(
+        "--no-cache",
+        dest="cache_enabled",
+        action="store_false",
+        help="Disable cache reads and writes.",
+    )
+
+    parser.set_defaults(
+        cache_enabled=True,
+        offline=False,
+    )
 
 
 def _positive_float(value: str) -> float:

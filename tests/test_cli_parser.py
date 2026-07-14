@@ -4,6 +4,8 @@ import pytest
 
 from pipeline_dashboard_api_client.cli.parser import (
     DEFAULT_BASE_URL,
+    DEFAULT_CACHE_DIR,
+    DEFAULT_CACHE_TTL_SECONDS,
     DEFAULT_MAX_RETRIES,
     DEFAULT_OUTPUT_MODE,
     DEFAULT_TIMEOUT_SECONDS,
@@ -180,3 +182,106 @@ def test_command_help_exits_successfully() -> None:
         parser.parse_args(["dashboard", "--help"])
 
     assert captured.value.code == 0
+
+
+def test_api_command_uses_default_cache_options() -> None:
+    """API commands receive stable default cache options."""
+    parser = build_parser()
+
+    args = parser.parse_args(["dashboard"])
+
+    assert args.cache_dir == DEFAULT_CACHE_DIR
+    assert args.cache_ttl == DEFAULT_CACHE_TTL_SECONDS
+    assert args.cache_enabled is True
+    assert args.offline is False
+
+
+def test_api_command_accepts_custom_cache_options() -> None:
+    """Cache directory and TTL can be configured explicitly."""
+    parser = build_parser()
+
+    args = parser.parse_args(
+        [
+            "dashboard",
+            "--cache-dir",
+            "/tmp/radar-cache",
+            "--cache-ttl",
+            "45",
+        ]
+    )
+
+    assert args.cache_dir == "/tmp/radar-cache"
+    assert args.cache_ttl == 45.0
+    assert args.cache_enabled is True
+
+
+def test_offline_option_enables_offline_mode() -> None:
+    """Offline fallback can be enabled explicitly."""
+    parser = build_parser()
+
+    args = parser.parse_args(
+        [
+            "summary",
+            "--offline",
+        ]
+    )
+
+    assert args.offline is True
+    assert args.cache_enabled is True
+
+
+def test_no_cache_option_disables_cache() -> None:
+    """Cache can be disabled explicitly."""
+    parser = build_parser()
+
+    args = parser.parse_args(
+        [
+            "health",
+            "--no-cache",
+        ]
+    )
+
+    assert args.cache_enabled is False
+    assert args.offline is False
+
+
+def test_offline_and_no_cache_are_mutually_exclusive() -> None:
+    """Offline fallback cannot be combined with disabled cache."""
+    parser = build_parser()
+
+    with pytest.raises(SystemExit) as captured:
+        parser.parse_args(
+            [
+                "dashboard",
+                "--offline",
+                "--no-cache",
+            ]
+        )
+
+    assert captured.value.code == 2
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "0",
+        "-1",
+        "invalid",
+    ],
+)
+def test_cache_ttl_rejects_invalid_values(
+    value: str,
+) -> None:
+    """Cache TTL requires a positive numeric value."""
+    parser = build_parser()
+
+    with pytest.raises(SystemExit) as captured:
+        parser.parse_args(
+            [
+                "dashboard",
+                "--cache-ttl",
+                value,
+            ]
+        )
+
+    assert captured.value.code == 2

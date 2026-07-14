@@ -1,11 +1,15 @@
 """Tests for CLI runtime configuration building."""
 
 import argparse
+from pathlib import Path
 
 import pytest
 
+from pipeline_dashboard_api_client.cached_client import OfflineMode
 from pipeline_dashboard_api_client.cli.config import (
+    CliCacheConfig,
     CliConfigError,
+    CliRuntimeConfig,
     OutputMode,
     build_cli_config,
     parse_headers,
@@ -16,6 +20,7 @@ from pipeline_dashboard_api_client.cli.parser import (
     DEFAULT_TIMEOUT_SECONDS,
     build_parser,
 )
+from pipeline_dashboard_api_client.contracts import ApiClientConfig
 
 
 def test_build_cli_config_uses_parser_defaults() -> None:
@@ -180,5 +185,122 @@ def test_build_cli_config_rejects_missing_argument() -> None:
     with pytest.raises(
         CliConfigError,
         match="timeout",
+    ):
+        build_cli_config(args)
+
+
+def test_build_cli_config_uses_default_cache_config() -> None:
+    """Parser defaults produce enabled fresh-response caching."""
+    parser = build_parser()
+    args = parser.parse_args(["dashboard"])
+
+    config = build_cli_config(args)
+
+    assert config.cache.enabled is True
+    assert config.cache.policy.ttl_seconds == 300.0
+    assert config.cache.offline_mode is OfflineMode.DISABLED
+    assert config.cache.root == Path(
+        "~/.cache/radar-dashboard-client"
+    ).expanduser()
+
+
+def test_build_cli_config_maps_custom_cache_values() -> None:
+    """Explicit cache values enter normalized runtime config."""
+    parser = build_parser()
+    args = parser.parse_args(
+        [
+            "dashboard",
+            "--cache-dir",
+            "/tmp/radar-cache",
+            "--cache-ttl",
+            "45",
+        ]
+    )
+
+    config = build_cli_config(args)
+
+    assert config.cache.root == Path("/tmp/radar-cache")
+    assert config.cache.policy.ttl_seconds == 45.0
+    assert config.cache.enabled is True
+    assert config.cache.offline_mode is OfflineMode.DISABLED
+
+
+def test_build_cli_config_maps_offline_mode() -> None:
+    """The offline flag selects stale-on-error fallback."""
+    parser = build_parser()
+    args = parser.parse_args(
+        [
+            "summary",
+            "--offline",
+        ]
+    )
+
+    config = build_cli_config(args)
+
+    assert config.cache.enabled is True
+    assert (
+        config.cache.offline_mode
+        is OfflineMode.STALE_ON_ERROR
+    )
+
+
+def test_build_cli_config_maps_disabled_cache() -> None:
+    """The no-cache flag disables cache composition."""
+    parser = build_parser()
+    args = parser.parse_args(
+        [
+            "health",
+            "--no-cache",
+        ]
+    )
+
+    config = build_cli_config(args)
+
+    assert config.cache.enabled is False
+    assert config.cache.offline_mode is OfflineMode.DISABLED
+
+
+def test_runtime_config_preserves_legacy_construction() -> None:
+    """Existing callers may omit explicit cache configuration."""
+    config = CliRuntimeConfig(
+        client=ApiClientConfig(
+            base_url="https://dashboard.example.com",
+        ),
+        output_mode=OutputMode.PRETTY,
+    )
+
+    assert isinstance(config.cache, CliCacheConfig)
+    assert config.cache.enabled is True
+
+
+def test_cache_config_rejects_offline_when_disabled() -> None:
+    """Offline behavior requires an enabled cache."""
+    with pytest.raises(
+        ValueError,
+        match="requires cache",
+    ):
+        CliCacheConfig(
+            enabled=False,
+            offline_mode=OfflineMode.STALE_ON_ERROR,
+        )
+
+
+def test_build_cli_config_rejects_direct_conflicting_namespace() -> None:
+    """Invalid manually assembled namespaces are normalized safely."""
+    args = argparse.Namespace(
+        base_url="http://127.0.0.1:8000",
+        timeout=10.0,
+        retry=2,
+        header=None,
+        output_mode="pretty",
+        cache_dir="/tmp/radar-cache",
+        cache_ttl=300.0,
+        cache_enabled=False,
+        offline=True,
+    )
+
+    with pytest.raises(
+        CliConfigError,
+        match="requires cache",
     ):
         build_cli_config(args)

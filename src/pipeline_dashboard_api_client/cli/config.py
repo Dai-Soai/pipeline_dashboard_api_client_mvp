@@ -3,9 +3,16 @@
 from __future__ import annotations
 
 import argparse
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import StrEnum
+from pathlib import Path
 
+from pipeline_dashboard_api_client.cache_contracts import CachePolicy
+from pipeline_dashboard_api_client.cached_client import OfflineMode
+from pipeline_dashboard_api_client.cli.parser import (
+    DEFAULT_CACHE_DIR,
+    DEFAULT_CACHE_TTL_SECONDS,
+)
 from pipeline_dashboard_api_client.contracts import (
     ApiClientConfig,
     Headers,
@@ -24,11 +31,47 @@ class CliConfigError(ValueError):
 
 
 @dataclass(frozen=True, slots=True)
+class CliCacheConfig:
+    """Normalized CLI cache and offline configuration."""
+
+    root: Path = Path(DEFAULT_CACHE_DIR)
+    policy: CachePolicy = field(default_factory=CachePolicy)
+    offline_mode: OfflineMode = OfflineMode.DISABLED
+    enabled: bool = True
+
+    def __post_init__(self) -> None:
+        """Normalize and validate cache configuration."""
+        normalized_root = self.root.expanduser()
+
+        if not str(normalized_root).strip():
+            raise ValueError(
+                "cache root must not be empty"
+            )
+
+        if (
+            not self.enabled
+            and self.offline_mode is not OfflineMode.DISABLED
+        ):
+            raise ValueError(
+                "offline mode requires cache to be enabled"
+            )
+
+        object.__setattr__(
+            self,
+            "root",
+            normalized_root,
+        )
+
+
+@dataclass(frozen=True, slots=True)
 class CliRuntimeConfig:
     """Normalized runtime configuration produced from CLI arguments."""
 
     client: ApiClientConfig
     output_mode: OutputMode
+    cache: CliCacheConfig = field(
+        default_factory=CliCacheConfig
+    )
 
 
 def build_cli_config(
@@ -45,6 +88,33 @@ def build_cli_config(
         _optional_string_list_argument(args, "header")
     )
 
+    cache_root = _optional_path_argument(
+        args,
+        "cache_dir",
+        default=Path(DEFAULT_CACHE_DIR),
+    )
+    cache_ttl_seconds = _optional_float_argument(
+        args,
+        "cache_ttl",
+        default=DEFAULT_CACHE_TTL_SECONDS,
+    )
+    cache_enabled = _optional_bool_argument(
+        args,
+        "cache_enabled",
+        default=True,
+    )
+    offline_enabled = _optional_bool_argument(
+        args,
+        "offline",
+        default=False,
+    )
+
+    offline_mode = (
+        OfflineMode.STALE_ON_ERROR
+        if offline_enabled
+        else OfflineMode.DISABLED
+    )
+
     try:
         client_config = ApiClientConfig(
             base_url=base_url,
@@ -52,12 +122,22 @@ def build_cli_config(
             max_retries=max_retries,
             default_headers=headers,
         )
+
+        cache_config = CliCacheConfig(
+            root=cache_root,
+            policy=CachePolicy(
+                ttl_seconds=cache_ttl_seconds,
+            ),
+            offline_mode=offline_mode,
+            enabled=cache_enabled,
+        )
     except ValueError as exc:
         raise CliConfigError(str(exc)) from exc
 
     return CliRuntimeConfig(
         client=client_config,
         output_mode=output_mode,
+        cache=cache_config,
     )
 
 
@@ -195,3 +275,60 @@ def _optional_string_list_argument(
         )
 
     return list(value)
+
+
+def _optional_path_argument(
+    args: argparse.Namespace,
+    name: str,
+    *,
+    default: Path,
+) -> Path:
+    """Read an optional filesystem path argument."""
+    value = getattr(args, name, default)
+
+    if isinstance(value, Path):
+        return value
+
+    if not isinstance(value, str) or not value.strip():
+        raise CliConfigError(
+            f"invalid CLI argument: {name}"
+        )
+
+    return Path(value.strip())
+
+
+def _optional_float_argument(
+    args: argparse.Namespace,
+    name: str,
+    *,
+    default: float,
+) -> float:
+    """Read an optional floating-point argument."""
+    value = getattr(args, name, default)
+
+    if isinstance(value, bool) or not isinstance(
+        value,
+        int | float,
+    ):
+        raise CliConfigError(
+            f"invalid CLI argument: {name}"
+        )
+
+    return float(value)
+
+
+def _optional_bool_argument(
+    args: argparse.Namespace,
+    name: str,
+    *,
+    default: bool,
+) -> bool:
+    """Read an optional boolean argument."""
+    value = getattr(args, name, default)
+
+    if not isinstance(value, bool):
+        raise CliConfigError(
+            f"invalid CLI argument: {name}"
+        )
+
+    return value
