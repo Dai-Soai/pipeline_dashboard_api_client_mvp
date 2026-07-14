@@ -13,6 +13,7 @@ from pipeline_dashboard_api_client.cache_service import (
 from pipeline_dashboard_api_client.cached_client import (
     CachedDashboardClient,
     NowProvider,
+    OfflineMode,
 )
 from pipeline_dashboard_api_client.client import (
     DashboardClient,
@@ -64,6 +65,7 @@ __all__ = [
     "JsonScalar",
     "JsonValue",
     "NowProvider",
+    "OfflineMode",
     "QueryParameters",
     "ResponseParser",
     "SummaryDocument",

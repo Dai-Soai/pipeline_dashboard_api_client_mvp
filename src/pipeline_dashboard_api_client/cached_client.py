@@ -4,16 +4,22 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from datetime import UTC, datetime
+from enum import StrEnum
 
 from pipeline_dashboard_api_client.cache_contracts import (
     CacheEntry,
     CacheKey,
     CachePolicy,
 )
-from pipeline_dashboard_api_client.cache_service import CacheService
+from pipeline_dashboard_api_client.cache_service import (
+    CacheLookup,
+    CacheService,
+)
 from pipeline_dashboard_api_client.client import DashboardClient
 from pipeline_dashboard_api_client.contracts import (
     ApiResponse,
+    DashboardApiClientError,
+    ErrorKind,
     Headers,
     QueryParameters,
 )
@@ -21,10 +27,23 @@ from pipeline_dashboard_api_client.contracts import (
 NowProvider = Callable[[], datetime]
 
 
+class OfflineMode(StrEnum):
+    """Offline fallback behavior for stale cache entries."""
+
+    DISABLED = "disabled"
+    STALE_ON_ERROR = "stale_on_error"
+
+
 class CachedDashboardClient:
-    """Serve fresh cached responses before contacting the backend."""
+    """Serve cached responses and optionally fall back when offline."""
 
     _CACHE_NAMESPACE = "radar-dashboard-api-client"
+    _OFFLINE_ERROR_KINDS = frozenset(
+        {
+            ErrorKind.CONNECTION,
+            ErrorKind.TIMEOUT,
+        }
+    )
 
     def __init__(
         self,
@@ -32,12 +51,14 @@ class CachedDashboardClient:
         cache_service: CacheService,
         policy: CachePolicy,
         *,
+        offline_mode: OfflineMode = OfflineMode.DISABLED,
         now_provider: NowProvider | None = None,
     ) -> None:
         """Initialize the cache-aware dashboard client."""
         self._client = client
         self._cache_service = cache_service
         self._policy = policy
+        self._offline_mode = offline_mode
         self._now_provider = now_provider or _utc_now
 
     @property
@@ -54,6 +75,11 @@ class CachedDashboardClient:
     def policy(self) -> CachePolicy:
         """Return the configured cache policy."""
         return self._policy
+
+    @property
+    def offline_mode(self) -> OfflineMode:
+        """Return the configured offline fallback mode."""
+        return self._offline_mode
 
     def get_dashboard(
         self,
@@ -106,20 +132,35 @@ class CachedDashboardClient:
         resource: str,
         network_call: Callable[[], ApiResponse[bytes]],
     ) -> ApiResponse[bytes]:
-        """Return a fresh cache hit or refresh from the network."""
+        """Return fresh cache, refresh network, or use stale fallback."""
         key = self._build_key(resource)
         now = self._normalized_now()
 
-        cached_entry = self._cache_service.get_usable(
+        lookup = self._cache_service.lookup(
             key,
             self._policy,
             now=now,
         )
 
-        if cached_entry is not None:
-            return self._response_from_cache(cached_entry)
+        if lookup.is_fresh and lookup.entry is not None:
+            return self._response_from_cache(
+                lookup.entry,
+                cache_state="fresh",
+                offline=False,
+            )
 
-        response = network_call()
+        try:
+            response = network_call()
+        except DashboardApiClientError as error:
+            stale_response = self._offline_fallback(
+                lookup,
+                error=error,
+            )
+
+            if stale_response is not None:
+                return stale_response
+
+            raise
 
         self._cache_service.write(
             CacheEntry(
@@ -138,6 +179,28 @@ class CachedDashboardClient:
 
         return response
 
+    def _offline_fallback(
+        self,
+        lookup: CacheLookup,
+        *,
+        error: DashboardApiClientError,
+    ) -> ApiResponse[bytes] | None:
+        """Return stale cache for eligible offline failures."""
+        if self._offline_mode is OfflineMode.DISABLED:
+            return None
+
+        if error.kind not in self._OFFLINE_ERROR_KINDS:
+            return None
+
+        if not lookup.is_stale or lookup.entry is None:
+            return None
+
+        return self._response_from_cache(
+            lookup.entry,
+            cache_state="stale",
+            offline=True,
+        )
+
     @classmethod
     def _build_key(
         cls,
@@ -152,12 +215,21 @@ class CachedDashboardClient:
     @staticmethod
     def _response_from_cache(
         entry: CacheEntry,
+        *,
+        cache_state: str,
+        offline: bool,
     ) -> ApiResponse[bytes]:
         """Convert a cached entry back into an API response."""
+        headers = dict(entry.headers)
+        headers["X-RADAR-Cache"] = cache_state
+
+        if offline:
+            headers["X-RADAR-Offline"] = "true"
+
         return ApiResponse(
             status_code=entry.status_code,
             data=entry.content,
-            headers=entry.headers,
+            headers=headers,
             request_id=entry.request_id,
             elapsed_ms=0.0,
         )

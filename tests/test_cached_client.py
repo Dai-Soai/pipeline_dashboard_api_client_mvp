@@ -2,12 +2,18 @@
 
 from datetime import UTC, datetime, timedelta
 
+import pytest
+
 from pipeline_dashboard_api_client import (
     ApiClientConfig,
+    ApiErrorPayload,
     ApiRequest,
     ApiResponse,
     CachedDashboardClient,
+    DashboardApiClientError,
     DashboardClient,
+    ErrorKind,
+    OfflineMode,
 )
 from pipeline_dashboard_api_client.cache_contracts import (
     CacheEntry,
@@ -248,7 +254,10 @@ def test_cached_response_preserves_metadata() -> None:
     response = client.get_summary()
 
     assert response.status_code == 206
-    assert response.headers == {"X-Cache-Test": "yes"}
+    assert response.headers == {
+        "X-Cache-Test": "yes",
+        "X-RADAR-Cache": "fresh",
+    }
     assert response.request_id == "request-cached-summary"
     assert transport.requests == []
 
@@ -345,3 +354,256 @@ def test_naive_now_provider_is_rejected() -> None:
         assert "timezone-aware" in str(error)
     else:
         raise AssertionError("expected ValueError")
+
+
+class ErrorTransport:
+    """Transport double raising a normalized client error."""
+
+    def __init__(
+        self,
+        error: DashboardApiClientError,
+    ) -> None:
+        """Initialize the failing transport."""
+        self.error = error
+        self.requests: list[ApiRequest] = []
+
+    def execute(
+        self,
+        request: ApiRequest,
+    ) -> ApiResponse[bytes]:
+        """Record the request and raise the configured error."""
+        self.requests.append(request)
+        raise self.error
+
+    def close(self) -> None:
+        """Satisfy the transport protocol."""
+
+
+def build_offline_client(
+    *,
+    store: MemoryCacheStore,
+    error_kind: ErrorKind,
+    offline_mode: OfflineMode,
+    resource: str = "dashboard",
+    age_seconds: float = 3600,
+) -> tuple[CachedDashboardClient, ErrorTransport]:
+    """Build a cache-aware client with a failing backend."""
+    key = build_cache_key(resource)
+
+    store.entries[key] = CacheEntry(
+        key=key,
+        content=b'{"status":"stale-cache"}',
+        stored_at=NOW - timedelta(seconds=age_seconds),
+        status_code=200,
+        headers={
+            "Content-Type": "application/json",
+        },
+        request_id="request-stale-31",
+    )
+
+    error = DashboardApiClientError(
+        ApiErrorPayload(
+            kind=error_kind,
+            message="backend unavailable",
+        )
+    )
+    transport = ErrorTransport(error)
+    config = ApiClientConfig(
+        base_url="https://dashboard.example.com",
+    )
+
+    client = CachedDashboardClient(
+        DashboardClient(
+            config,
+            transport=transport,
+        ),
+        CacheService(store),
+        CachePolicy(ttl_seconds=60),
+        offline_mode=offline_mode,
+        now_provider=lambda: NOW,
+    )
+
+    return client, transport
+
+
+def test_offline_mode_defaults_to_disabled() -> None:
+    """Offline fallback remains opt-in."""
+    store = MemoryCacheStore()
+    client, _ = build_cached_client(store=store)
+
+    assert client.offline_mode is OfflineMode.DISABLED
+
+
+def test_connection_error_uses_stale_cache_in_offline_mode() -> None:
+    """Connection failures may fall back to stale dashboard cache."""
+    store = MemoryCacheStore()
+    client, transport = build_offline_client(
+        store=store,
+        error_kind=ErrorKind.CONNECTION,
+        offline_mode=OfflineMode.STALE_ON_ERROR,
+    )
+
+    response = client.get_dashboard()
+
+    assert len(transport.requests) == 1
+    assert response.data == b'{"status":"stale-cache"}'
+    assert response.request_id == "request-stale-31"
+    assert response.headers["X-RADAR-Cache"] == "stale"
+    assert response.headers["X-RADAR-Offline"] == "true"
+    assert response.elapsed_ms == 0.0
+
+
+def test_timeout_error_uses_stale_cache_in_offline_mode() -> None:
+    """Timeout failures may fall back to stale cache."""
+    store = MemoryCacheStore()
+    client, _ = build_offline_client(
+        store=store,
+        error_kind=ErrorKind.TIMEOUT,
+        offline_mode=OfflineMode.STALE_ON_ERROR,
+        resource="summary",
+    )
+
+    response = client.get_summary()
+
+    assert response.data == b'{"status":"stale-cache"}'
+    assert response.headers["X-RADAR-Offline"] == "true"
+
+
+def test_disabled_offline_mode_preserves_connection_error() -> None:
+    """Stale cache is not used when offline mode is disabled."""
+    store = MemoryCacheStore()
+    client, _ = build_offline_client(
+        store=store,
+        error_kind=ErrorKind.CONNECTION,
+        offline_mode=OfflineMode.DISABLED,
+    )
+
+    with pytest.raises(
+        DashboardApiClientError,
+    ) as captured:
+        client.get_dashboard()
+
+    assert captured.value.kind is ErrorKind.CONNECTION
+
+
+def test_http_error_does_not_use_stale_cache() -> None:
+    """HTTP failures are not hidden by stale cache."""
+    store = MemoryCacheStore()
+    client, _ = build_offline_client(
+        store=store,
+        error_kind=ErrorKind.HTTP,
+        offline_mode=OfflineMode.STALE_ON_ERROR,
+    )
+
+    with pytest.raises(
+        DashboardApiClientError,
+    ) as captured:
+        client.get_dashboard()
+
+    assert captured.value.kind is ErrorKind.HTTP
+
+
+def test_decoding_error_does_not_use_stale_cache() -> None:
+    """Decoding failures are not eligible for offline fallback."""
+    store = MemoryCacheStore()
+    client, _ = build_offline_client(
+        store=store,
+        error_kind=ErrorKind.DECODING,
+        offline_mode=OfflineMode.STALE_ON_ERROR,
+    )
+
+    with pytest.raises(
+        DashboardApiClientError,
+    ) as captured:
+        client.get_dashboard()
+
+    assert captured.value.kind is ErrorKind.DECODING
+
+
+def test_offline_mode_requires_existing_stale_entry() -> None:
+    """Offline fallback cannot succeed on a true cache miss."""
+    store = MemoryCacheStore()
+    error = DashboardApiClientError(
+        ApiErrorPayload(
+            kind=ErrorKind.CONNECTION,
+            message="backend unavailable",
+        )
+    )
+    transport = ErrorTransport(error)
+    config = ApiClientConfig(
+        base_url="https://dashboard.example.com",
+    )
+    client = CachedDashboardClient(
+        DashboardClient(
+            config,
+            transport=transport,
+        ),
+        CacheService(store),
+        CachePolicy(ttl_seconds=60),
+        offline_mode=OfflineMode.STALE_ON_ERROR,
+        now_provider=lambda: NOW,
+    )
+
+    with pytest.raises(
+        DashboardApiClientError,
+    ) as captured:
+        client.get_dashboard()
+
+    assert captured.value.kind is ErrorKind.CONNECTION
+
+
+def test_fresh_cache_does_not_contact_failing_backend() -> None:
+    """Fresh cache still wins before offline handling is needed."""
+    store = MemoryCacheStore()
+    key = build_cache_key("dashboard")
+    store.entries[key] = CacheEntry(
+        key=key,
+        content=b'{"status":"fresh-cache"}',
+        stored_at=NOW - timedelta(seconds=10),
+    )
+
+    error = DashboardApiClientError(
+        ApiErrorPayload(
+            kind=ErrorKind.CONNECTION,
+            message="backend unavailable",
+        )
+    )
+    transport = ErrorTransport(error)
+    config = ApiClientConfig(
+        base_url="https://dashboard.example.com",
+    )
+    client = CachedDashboardClient(
+        DashboardClient(
+            config,
+            transport=transport,
+        ),
+        CacheService(store),
+        CachePolicy(ttl_seconds=60),
+        offline_mode=OfflineMode.STALE_ON_ERROR,
+        now_provider=lambda: NOW,
+    )
+
+    response = client.get_dashboard()
+
+    assert response.data == b'{"status":"fresh-cache"}'
+    assert response.headers["X-RADAR-Cache"] == "fresh"
+    assert "X-RADAR-Offline" not in response.headers
+    assert transport.requests == []
+
+
+def test_offline_fallback_does_not_overwrite_stale_cache() -> None:
+    """Serving stale fallback does not rewrite its timestamp."""
+    store = MemoryCacheStore()
+    client, _ = build_offline_client(
+        store=store,
+        error_kind=ErrorKind.TIMEOUT,
+        offline_mode=OfflineMode.STALE_ON_ERROR,
+    )
+    key = build_cache_key("dashboard")
+    original_entry = store.entries[key]
+    original_writes = store.write_calls
+
+    client.get_dashboard()
+
+    assert store.entries[key] is original_entry
+    assert store.write_calls == original_writes
