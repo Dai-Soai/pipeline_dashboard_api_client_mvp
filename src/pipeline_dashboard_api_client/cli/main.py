@@ -4,9 +4,13 @@ from __future__ import annotations
 
 import argparse
 from collections.abc import Callable, Sequence
+from pathlib import Path
 from typing import TextIO
 
+from pipeline_dashboard_api_client.cache_store import FileCacheStore
 from pipeline_dashboard_api_client.cli.commands import (
+    run_cache_clear_command,
+    run_cache_status_command,
     run_dashboard_command,
     run_health_command,
     run_summary_command,
@@ -15,6 +19,7 @@ from pipeline_dashboard_api_client.cli.commands import (
 from pipeline_dashboard_api_client.cli.config import (
     CliConfigError,
     CliRuntimeConfig,
+    OutputMode,
     build_cli_config,
 )
 from pipeline_dashboard_api_client.cli.factory import (
@@ -50,6 +55,16 @@ def main(
         )
         return 0
 
+    if command in {
+        "cache-status",
+        "cache-clear",
+    }:
+        return dispatch_cache_command(
+            command,
+            args,
+            output_stream=output_stream,
+        )
+
     try:
         runtime_config = build_cli_config(args)
     except CliConfigError as error:
@@ -67,6 +82,60 @@ def main(
             output_stream=output_stream,
             error_stream=error_stream,
         )
+
+
+def dispatch_cache_command(
+    command: str,
+    args: argparse.Namespace,
+    *,
+    output_stream: TextIO | None = None,
+) -> int:
+    """Dispatch a filesystem cache management command."""
+    cache_dir = getattr(args, "cache_dir", None)
+    output_mode_value = getattr(
+        args,
+        "output_mode",
+        OutputMode.PRETTY.value,
+    )
+
+    if not isinstance(cache_dir, str) or not cache_dir.strip():
+        raise RuntimeError(
+            "parsed cache directory is missing"
+        )
+
+    if not isinstance(output_mode_value, str):
+        raise RuntimeError(
+            "parsed cache output mode is invalid"
+        )
+
+    try:
+        output_mode = OutputMode(output_mode_value)
+    except ValueError as exc:
+        raise RuntimeError(
+            "parsed cache output mode is invalid"
+        ) from exc
+
+    store = FileCacheStore(
+        Path(cache_dir).expanduser(),
+    )
+
+    if command == "cache-status":
+        return run_cache_status_command(
+            store,
+            output_mode=output_mode,
+            output_stream=output_stream,
+        )
+
+    if command == "cache-clear":
+        return run_cache_clear_command(
+            store,
+            output_mode=output_mode,
+            output_stream=output_stream,
+        )
+
+    raise RuntimeError(
+        f"unsupported cache command: {command}"
+    )
 
 
 def dispatch_command(
