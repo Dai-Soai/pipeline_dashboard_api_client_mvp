@@ -5,6 +5,11 @@ from __future__ import annotations
 from typing import Protocol, TextIO
 
 from pipeline_dashboard_api_client.cli.config import OutputMode
+from pipeline_dashboard_api_client.cli.export_contracts import (
+    JsonExporter,
+    JsonExportError,
+    JsonExportRequest,
+)
 from pipeline_dashboard_api_client.cli.printer import (
     EXIT_FAILURE,
     EXIT_SUCCESS,
@@ -23,6 +28,7 @@ class HealthCommandDependencies(Protocol):
     def client(self) -> DashboardCommandClient:
         """Return the dashboard command client."""
         ...
+
     response_parser: ResponseParser
 
 
@@ -30,10 +36,12 @@ def run_health_command(
     dependencies: HealthCommandDependencies,
     *,
     output_mode: OutputMode,
+    export_request: JsonExportRequest | None = None,
+    exporter: JsonExporter | None = None,
     output_stream: TextIO | None = None,
     error_stream: TextIO | None = None,
 ) -> int:
-    """Fetch, parse, and print the dashboard backend health document."""
+    """Fetch, parse, and emit the dashboard backend health document."""
     try:
         raw_response = dependencies.client.get_health()
         parsed_response = dependencies.response_parser.parse_health(
@@ -47,10 +55,50 @@ def run_health_command(
         )
         return EXIT_FAILURE
 
-    print_json(
-        parsed_response.data.payload,
-        output_mode=output_mode,
-        stream=output_stream,
-    )
+    payload = parsed_response.data.payload
+
+    if export_request is None:
+        print_json(
+            payload,
+            output_mode=output_mode,
+            stream=output_stream,
+        )
+        return EXIT_SUCCESS
+
+    if exporter is None:
+        print_json(
+            {
+                "error": {
+                    "kind": "exporter_missing",
+                    "message": (
+                        "JSON exporter is required when an export "
+                        "request is provided"
+                    ),
+                    "path": str(export_request.path),
+                }
+            },
+            output_mode=output_mode,
+            stream=error_stream,
+        )
+        return EXIT_FAILURE
+
+    try:
+        exporter.export(
+            payload,
+            export_request,
+        )
+    except JsonExportError as error:
+        print_json(
+            {
+                "error": {
+                    "kind": error.kind.value,
+                    "message": str(error),
+                    "path": str(error.path),
+                }
+            },
+            output_mode=output_mode,
+            stream=error_stream,
+        )
+        return EXIT_FAILURE
 
     return EXIT_SUCCESS
