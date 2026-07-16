@@ -64,6 +64,36 @@ class CliCacheConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class CliExportConfig:
+    """Normalized CLI JSON export configuration."""
+
+    output_file: Path | None = None
+    overwrite: bool = False
+
+    def __post_init__(self) -> None:
+        """Normalize and validate export configuration."""
+        if self.output_file is None:
+            if self.overwrite:
+                raise ValueError(
+                    "overwrite requires an output file"
+                )
+            return
+
+        normalized_output_file = self.output_file.expanduser()
+
+        if not str(normalized_output_file).strip():
+            raise ValueError(
+                "output file must not be empty"
+            )
+
+        object.__setattr__(
+            self,
+            "output_file",
+            normalized_output_file,
+        )
+
+
+@dataclass(frozen=True, slots=True)
 class CliRuntimeConfig:
     """Normalized runtime configuration produced from CLI arguments."""
 
@@ -71,6 +101,9 @@ class CliRuntimeConfig:
     output_mode: OutputMode
     cache: CliCacheConfig = field(
         default_factory=CliCacheConfig
+    )
+    export: CliExportConfig = field(
+        default_factory=CliExportConfig
     )
 
 
@@ -108,6 +141,15 @@ def build_cli_config(
         "offline",
         default=False,
     )
+    output_file = _optional_nullable_path_argument(
+        args,
+        "output_file",
+    )
+    overwrite = _optional_bool_argument(
+        args,
+        "overwrite",
+        default=False,
+    )
 
     offline_mode = (
         OfflineMode.STALE_ON_ERROR
@@ -131,6 +173,11 @@ def build_cli_config(
             offline_mode=offline_mode,
             enabled=cache_enabled,
         )
+
+        export_config = CliExportConfig(
+            output_file=output_file,
+            overwrite=overwrite,
+        )
     except ValueError as exc:
         raise CliConfigError(str(exc)) from exc
 
@@ -138,6 +185,7 @@ def build_cli_config(
         client=client_config,
         output_mode=output_mode,
         cache=cache_config,
+        export=export_config,
     )
 
 
@@ -285,6 +333,27 @@ def _optional_path_argument(
 ) -> Path:
     """Read an optional filesystem path argument."""
     value = getattr(args, name, default)
+
+    if isinstance(value, Path):
+        return value
+
+    if not isinstance(value, str) or not value.strip():
+        raise CliConfigError(
+            f"invalid CLI argument: {name}"
+        )
+
+    return Path(value.strip())
+
+
+def _optional_nullable_path_argument(
+    args: argparse.Namespace,
+    name: str,
+) -> Path | None:
+    """Read an optional nullable filesystem path argument."""
+    value = getattr(args, name, None)
+
+    if value is None:
+        return None
 
     if isinstance(value, Path):
         return value

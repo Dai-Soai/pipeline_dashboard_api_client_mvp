@@ -352,3 +352,55 @@ def test_cache_command_does_not_expose_network_options() -> None:
         )
 
     assert captured.value.code == 2
+
+
+def test_api_command_uses_default_export_options() -> None:
+    """API commands do not export unless explicitly requested."""
+    parser = build_parser()
+
+    args = parser.parse_args(["dashboard"])
+
+    assert args.output_file is None
+    assert args.overwrite is False
+
+
+def test_api_command_accepts_export_options() -> None:
+    """API commands accept output-file and overwrite options."""
+    parser = build_parser()
+
+    args = parser.parse_args(
+        [
+            "summary",
+            "--output-file",
+            "/tmp/summary.json",
+            "--overwrite",
+        ]
+    )
+
+    assert args.output_file == "/tmp/summary.json"
+    assert args.overwrite is True
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "cache-status",
+        "cache-clear",
+    ],
+)
+def test_cache_commands_do_not_expose_export_options(
+    command: str,
+) -> None:
+    """Cache commands reject API JSON export options."""
+    parser = build_parser()
+
+    with pytest.raises(SystemExit) as captured:
+        parser.parse_args(
+            [
+                command,
+                "--output-file",
+                "/tmp/cache.json",
+            ]
+        )
+
+    assert captured.value.code == 2

@@ -22,9 +22,16 @@ from pipeline_dashboard_api_client.cli.config import (
     OutputMode,
     build_cli_config,
 )
+from pipeline_dashboard_api_client.cli.export_contracts import (
+    JsonExporter,
+    JsonExportRequest,
+)
 from pipeline_dashboard_api_client.cli.factory import (
     CliDependencies,
     build_dependencies,
+)
+from pipeline_dashboard_api_client.cli.json_exporter import (
+    AtomicJsonFileExporter,
 )
 from pipeline_dashboard_api_client.cli.parser import build_parser
 from pipeline_dashboard_api_client.cli.printer import (
@@ -147,10 +154,18 @@ def dispatch_command(
     error_stream: TextIO | None = None,
 ) -> int:
     """Dispatch a normalized command to its dedicated handler."""
+    export_request = _build_export_request(runtime_config)
+    exporter: JsonExporter | None = (
+        AtomicJsonFileExporter()
+        if export_request is not None
+        else None
+    )
     if command == "dashboard":
         return run_dashboard_command(
             dependencies,
             output_mode=runtime_config.output_mode,
+            export_request=export_request,
+            exporter=exporter,
             output_stream=output_stream,
             error_stream=error_stream,
         )
@@ -159,6 +174,8 @@ def dispatch_command(
         return run_summary_command(
             dependencies,
             output_mode=runtime_config.output_mode,
+            export_request=export_request,
+            exporter=exporter,
             output_stream=output_stream,
             error_stream=error_stream,
         )
@@ -167,6 +184,8 @@ def dispatch_command(
         return run_health_command(
             dependencies,
             output_mode=runtime_config.output_mode,
+            export_request=export_request,
+            exporter=exporter,
             output_stream=output_stream,
             error_stream=error_stream,
         )
@@ -175,12 +194,30 @@ def dispatch_command(
         return run_validate_command(
             dependencies,
             output_mode=runtime_config.output_mode,
+            export_request=export_request,
+            exporter=exporter,
             output_stream=output_stream,
             error_stream=error_stream,
         )
 
     raise RuntimeError(
         f"unsupported dispatched command: {command}"
+    )
+
+
+def _build_export_request(
+    runtime_config: CliRuntimeConfig,
+) -> JsonExportRequest | None:
+    """Build an optional export request from runtime configuration."""
+    output_file = runtime_config.export.output_file
+
+    if output_file is None:
+        return None
+
+    return JsonExportRequest(
+        path=output_file,
+        output_mode=runtime_config.output_mode,
+        overwrite=runtime_config.export.overwrite,
     )
 
 

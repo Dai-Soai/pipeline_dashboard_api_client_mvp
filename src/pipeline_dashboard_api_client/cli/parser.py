@@ -243,6 +243,25 @@ def _add_common_api_options(
         offline=False,
     )
 
+    parser.add_argument(
+        "--output-file",
+        default=None,
+        metavar="PATH",
+        help=(
+            "Write the command result as an atomic JSON file "
+            "instead of printing it to stdout."
+        ),
+    )
+
+    parser.add_argument(
+        "--overwrite",
+        action="store_true",
+        help=(
+            "Replace an existing output file. "
+            "Requires --output-file."
+        ),
+    )
+
 
 def _positive_float(value: str) -> float:
     """Parse a strictly positive floating-point value."""

@@ -304,3 +304,64 @@ def test_build_cli_config_rejects_direct_conflicting_namespace() -> None:
         match="requires cache",
     ):
         build_cli_config(args)
+
+
+def test_build_cli_config_uses_default_export_config() -> None:
+    """Parser defaults disable file export."""
+    parser = build_parser()
+    args = parser.parse_args(["dashboard"])
+
+    config = build_cli_config(args)
+
+    assert config.export.output_file is None
+    assert config.export.overwrite is False
+
+
+def test_build_cli_config_maps_export_options() -> None:
+    """Explicit export options enter normalized runtime config."""
+    parser = build_parser()
+    args = parser.parse_args(
+        [
+            "health",
+            "--output-file",
+            "~/radar/health.json",
+            "--overwrite",
+        ]
+    )
+
+    config = build_cli_config(args)
+
+    assert config.export.output_file == Path(
+        "~/radar/health.json"
+    ).expanduser()
+    assert config.export.overwrite is True
+
+
+def test_build_cli_config_rejects_overwrite_without_output_file() -> None:
+    """Overwrite cannot be enabled without an export destination."""
+    parser = build_parser()
+    args = parser.parse_args(
+        [
+            "validate",
+            "--overwrite",
+        ]
+    )
+
+    with pytest.raises(
+        CliConfigError,
+        match="overwrite requires an output file",
+    ):
+        build_cli_config(args)
+
+
+def test_runtime_config_preserves_legacy_export_construction() -> None:
+    """Existing runtime-config callers may omit export settings."""
+    config = CliRuntimeConfig(
+        client=ApiClientConfig(
+            base_url="https://dashboard.example.com",
+        ),
+        output_mode=OutputMode.PRETTY,
+    )
+
+    assert config.export.output_file is None
+    assert config.export.overwrite is False
