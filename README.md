@@ -7,7 +7,10 @@ Backend produced by Utility #30.
 
 ## Current phase
 
-M8.10 — JSON Export Finalization
+M9.2 — Metadata and Documentation Corrections
+
+M7 Cache Integration and M8 JSON Export are locked. The project is now in
+packaging and release-readiness preparation for version 0.1.0.
 
 ## Current capabilities
 
@@ -231,14 +234,18 @@ formatting.
 
 ## Development setup
 
+~~~bash
 python3 -m venv .venv
 source .venv/bin/activate
 
 python -m pip install --upgrade pip
 python -m pip install -e ".[dev]"
+~~~
 
 ## Quality checks
 
+~~~bash
 ruff check .
 mypy src tests
 pytest
+~~~
